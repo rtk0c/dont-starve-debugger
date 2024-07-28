@@ -945,24 +945,17 @@ function this.reGetSock()
         pcall(function() sock:close() end);
     end
 
-    --call slua-unreal luasocket
-    sock = lua_extension and lua_extension.luasocket and lua_extension.luasocket().tcp();
-    if sock == nil then
-        --call normal luasocket
-       if pcall(function() sock =  require("socket.core").tcp(); end) then
-            this.printToConsole("reGetSock success");
-       else
-            --call custom function to get socket
-            if customGetSocketInstance and pcall( function() sock =  customGetSocketInstance(); end ) then
-                this.printToConsole("reGetSock custom success");
-            else
-                this.printToConsole("[Error] reGetSock fail", 2);
-                return false;
-            end
-       end
+    --call normal luasocket
+    if pcall(function() sock =  require("socket.core").tcp(); end) then
+        this.printToConsole("reGetSock success");
     else
-        --set ue4 luasocket
-        this.printToConsole("reGetSock ue4 success");
+        --call custom function to get socket
+        if customGetSocketInstance and pcall( function() sock =  customGetSocketInstance(); end ) then
+            this.printToConsole("reGetSock custom success");
+        else
+            this.printToConsole("[Error] reGetSock fail", 2);
+            return false;
+        end
     end
     return true;
 end
