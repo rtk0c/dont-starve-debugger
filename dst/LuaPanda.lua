@@ -49,7 +49,33 @@ local connectTimeoutSec = 0.005;       --lua进程作为Client时, 连接超时�
 local listeningTimeoutSec = 0.5;       -- lua进程作为Server时,连接超时时间, 单位s. 时间过长等待attach时会造成卡顿，时间过短可能无法连接。建议值0.1 - 1
 local userDotInRequire = true;         --兼容require中使用 require(a.b) 和 require(a/b) 的形式引用文件夹中的文件，默认无需修改
 local traversalUserData = false;        --如果可以的话(取决于userdata原表中的__pairs)，展示userdata中的元素。 如果在调试器中展开userdata时有错误，请关闭此项.
-local customGetSocketInstance = nil;    --支持用户实现一个自定义调用luasocket的函数，函数返回值必须是一个socket实例。例: function() return require("socket.core").tcp() end;
+--支持用户实现一个自定义调用luasocket的函数，函数返回值必须是一个socket实例。例: function() return require("socket.core").tcp() end;
+local function customGetSocketInstance()
+    local pipeGame2Dbg
+    local pipeDbg2Game
+    local theSocket = {}
+    function theSocket:bind()
+        -- No-op
+    end
+    function theSocket:connect()
+        pipeGame2Dbg = io.open("debugger_bound", "wb")
+        pipeDbg2Game = io.open("debuggee_bound", "rb")
+    end
+    function theSocket:settimeout()
+        -- No-op
+    end
+    function theSocket:close()
+        pipeGame2Dbg:close()
+        pipeDbg2Game:close()
+    end
+    function theSocket:send(data)
+        return pipeGame2Dbg:write(data)
+    end
+    function theSocket:receive(mode)
+        return pipeDbg2Game:read(mode)
+    end
+    return theSocket
+end
 local consoleLogLevel = 2;           --打印在控制台(print)的日志等级 0 : all/ 1: info/ 2: error.
 --用户设置项END
 

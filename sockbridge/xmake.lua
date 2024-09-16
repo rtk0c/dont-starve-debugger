@@ -7,5 +7,4 @@ target("dst_debugger_sockserver")
     add_links("WS2_32") -- WinSock2
 
     set_kind("binary")
-    set_pcxxheader("src/pch.hpp")
     add_files("*.rc", "src/*.cpp")
