@@ -1,18 +1,30 @@
 {
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "type": "lua",
-            "request": "launch",
-            "tag": "normal",
-            "name": "LuaPanda",
-            "description": "通用模式,通常调试项目请选择此模式 | launchVer:3.2.0",
-            "cwd": "${workspaceFolder}",
-            "luaFileExtension": "",
-            "connectionPort": 28544,
-            "stopOnEntry": true,
-            "useCHook": true,
-            "autoPathMode": true,
-        },
-    ]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lua",
+      "request": "launch",
+      "tag": "normal",
+      "name": "LuaPanda",
+      "description": "通用模式,通常调试项目请选择此模式 | launchVer:3.2.0",
+      "cwd": "${workspaceFolder}",
+      "luaFileExtension": "",
+      "connectionPort": 28544,
+      "stopOnEntry": true,
+      "useCHook": true,
+      "autoPathMode": true,
+    },
+    {
+      "type": "lldb-dap",
+      "request": "launch",
+      "name": "LLDB: sockbridge",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/sockbridge/build/linux/x86_64/debug/sockbridge",
+      "args": [
+        "~/.steam/steam/steamapps/common/Don't Starve Together/data",
+        "127.0.0.1:28544",
+      ],
+      "env": [],
+    }
+  ]
 }

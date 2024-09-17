@@ -1,10 +1,9 @@
 add_rules("mode.debug", "mode.release")
 
-set_languages("c++20")
+set_languages("c17")
 
-target("dst_debugger_sockserver")
-    add_rules("win.sdk.application")
-    add_links("WS2_32") -- WinSock2
+target("sockbridge")
+    --add_links("WS2_32") -- WinSock2
 
     set_kind("binary")
-    add_files("*.rc", "src/*.cpp")
+    add_files("src/*.c")
