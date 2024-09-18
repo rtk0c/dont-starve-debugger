@@ -21,7 +21,7 @@
       "cwd": "${workspaceFolder}",
       "program": "${workspaceFolder}/sockbridge/build/linux/x86_64/debug/sockbridge",
       "args": [
-        "~/.steam/steam/steamapps/common/Don't Starve Together/data",
+        "${userHome}/.steam/steam/steamapps/common/Don't Starve Together/data",
         "127.0.0.1:28544",
       ],
       "env": [],

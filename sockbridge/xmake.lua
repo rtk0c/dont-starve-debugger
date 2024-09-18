@@ -1,6 +1,6 @@
 add_rules("mode.debug", "mode.release")
 
-set_languages("c17")
+set_languages("gnu17")
 
 target("sockbridge")
     --add_links("WS2_32") -- WinSock2
