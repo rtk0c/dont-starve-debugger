@@ -58,8 +58,10 @@ local function customGetSocketInstance()
         -- No-op
     end
     function theSocket:connect()
-        pipeGame2Dbg = io.open("debugger_bound", "wb")
-        pipeDbg2Game = io.open("debuggee_bound", "rb")
+        -- I have no idea why "rb" is fine, but opening "wb" will infinitely block
+        pipeDbg2Game = io.open("debuggee_bound", "r")
+        pipeGame2Dbg = io.open("debugger_bound", "w")
+        return true
     end
     function theSocket:settimeout()
         -- No-op
