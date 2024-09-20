@@ -2,6 +2,7 @@
 #include "str.h"
 
 #include <asm-generic/ioctls.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -133,6 +134,111 @@ static void add_epoll_fd(int epollfd, int flags, int watched_fd) {
     }
 }
 
+typedef enum : unsigned char {
+    SS_ReadNext,
+    SS_WriteNext,
+} SocksideState;
+
+typedef struct {
+    int sockfd;
+    int game2dbg_fd;
+    int dbg2game_fd;
+    int game2dbg_fill;
+    int dbg2game_fill;
+    char game2dbg_buffer[2048];
+    char dbg2game_buffer[2048];
+    SocksideState sockside_state;
+    bool closed;
+} TheBridge;
+
+static void handle_epoll_e_sock_read(TheBridge* b) {
+    const int sockfd = b->sockfd;
+
+    for (;;) {
+        char* buf = b->dbg2game_buffer + b->dbg2game_fill;
+        int size = sizeof(b->dbg2game_buffer) - b->dbg2game_fill;
+
+        int n = recv(sockfd, buf, size, 0);
+        if (n == 0) {
+            b->closed = true;
+            // Still write the remaining data, in case the socket is closed immediately after sending the last bits
+            break;
+        } else if (n != -1) {
+            b->dbg2game_fill += n;
+            break;
+        }
+
+        switch (errno) {
+        // Retry
+        case EINTR: continue;
+
+        // Kernel buffer exhausted, write what we have and epoll
+        case EAGAIN: goto exit_loop;
+
+        default:
+            perror("BUG");
+            exit(EXIT_FAILURE);
+        }
+    }
+exit_loop:
+
+    printf("dbg2game: %.*s\n", b->dbg2game_fill, b->dbg2game_buffer);
+    int res = write(b->dbg2game_fd, b->dbg2game_buffer, b->dbg2game_fill);
+    if (res == -1) {
+    }
+}
+
+static void handle_epoll_e_game2dbg(TheBridge* b) {
+    const int sockfd = b->sockfd;
+    const int pipefd = b->game2dbg_fd;
+
+    for (;;) {
+        char* buf = b->game2dbg_buffer + b->game2dbg_fill;
+        int size = sizeof(b->game2dbg_buffer) - b->game2dbg_fill;
+
+        int n = read(pipefd, buf, size);
+        if (n == 0) {
+            b->closed = true;
+            // Still write the remaining data, in case the socket is closed immediately after sending the last bits
+            break;
+        } else if (n != -1) {
+            b->game2dbg_fill += n;
+            break;
+        }
+
+        switch (errno) {
+        // Retry
+        case EINTR: continue;
+
+        // Kernel buffer exhausted, write what we have and epoll
+        case EAGAIN: goto exit_loop;
+
+        default:
+            perror("BUG");
+            exit(EXIT_FAILURE);
+        }
+        break;
+    }
+exit_loop:
+
+    printf("game2dbg: %.*s\n", b->game2dbg_fill, b->game2dbg_buffer);
+    int res = send(sockfd, b->game2dbg_buffer, b->game2dbg_fill, 0);
+    if (res == -1) {
+    }
+}
+
+static void handle_epoll_event(TheBridge* b, struct epoll_event* ev) {
+    int thefd = ev->data.fd;
+    if (thefd == b->sockfd) {
+        if (ev->events & EPOLLIN)
+            handle_epoll_e_sock_read(b);
+    } else if (thefd == b->game2dbg_fd) {
+        handle_epoll_e_game2dbg(b);
+    } else if (thefd == b->dbg2game_fd) {
+        // TODO write extra data
+    }
+}
+
 int main(int argc, char** argv) {
     String dst_data_dir = str_from_cstring(argv[1]);
     String upstream = str_from_cstring(argv[2]);
@@ -155,27 +261,26 @@ int main(int argc, char** argv) {
     char* upstream_port;
     parse_addr(upstream_host, &upstream_port);
 
+    TheBridge b = {};
+
     printf("Connecting to downstream game...\n");
-    int game2dbg_fd = open_game2dbg_fifo(game2dbg_path);
-    int dbg2game_fd = open_dbg2game_fifo(dbg2game_path);
+    b.game2dbg_fd = open_game2dbg_fifo(game2dbg_path);
+    b.dbg2game_fd = open_dbg2game_fifo(dbg2game_path);
     printf("Connected.\n");
 
     printf("Connecting to upstream %s:%s...\n", upstream_host, upstream_port);
-    int sockfd = socket_to_upstream_debugger(upstream_host, upstream_port);
+    b.sockfd = socket_to_upstream_debugger(upstream_host, upstream_port);
     printf("Connected.\n");
-
-    int epollfd = setup_epoll();
-    add_epoll_fd(epollfd, EPOLLIN, sockfd);
-    add_epoll_fd(epollfd, EPOLLIN, game2dbg_fd);
-    // TODO do not assume writes will finish in one go
-    // add_epoll_fd(epollfd, EPOLLOUT, dbg2game_fd);
 
 #define MAX_EVENTS 8
 
-    char dbg2game_buffer[2048];
-    char game2dbg_buffer[2048];
+    int epollfd = setup_epoll();
+    add_epoll_fd(epollfd, EPOLLIN, b.sockfd);
+    add_epoll_fd(epollfd, EPOLLIN, b.game2dbg_fd);
+    // TODO do not assume writes will finish in one go
+    // add_epoll_fd(epollfd, EPOLLOUT, dbg2game_fd);
 
-    for (;;) {
+    while (!b.closed) {
         struct epoll_event events[MAX_EVENTS];
         int nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
         if (nfds == -1) {
@@ -184,36 +289,10 @@ int main(int argc, char** argv) {
         }
 
         for (int i = 0; i < nfds; ++i) {
-            int thefd = events[i].data.fd;
-            if (thefd == sockfd) {
-                int n = recv(sockfd, dbg2game_buffer, sizeof(dbg2game_buffer), 0);
-                if (n == 0)
-                    goto exit;
-                else if (n == -1)
-                    // handle_recv_error(sockfd, error);
-                    ;
-
-                int res = write(dbg2game_fd, dbg2game_buffer, n);
-                if (res == -1) {
-                }
-            } else if (thefd == game2dbg_fd) {
-                int n = read(game2dbg_fd, game2dbg_buffer, sizeof(game2dbg_buffer));
-                if (n == 0)
-                    goto exit;
-                else if (n == -1)
-                    // handle_recv_error(sockfd, error);
-                    ;
-                
-                int res = send(sockfd, game2dbg_buffer, n, 0);
-                if (res == -1) {
-                }
-            } else if (thefd == dbg2game_fd) {
-                // TODO write extra data
-            }
+            handle_epoll_event(&b, &events[i]);
         }
     }
 
-exit:
     // Let's not free `a`. We're exiting anyways.
     // Or any of the other resources
     return 0;
