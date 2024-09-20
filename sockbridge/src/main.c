@@ -57,7 +57,7 @@ static void parse_addr(char* addr, char** port) {
 }
 
 static int socket_to_upstream_debugger(const char* upstream_host, const char* upstream_port) {
-    struct addrinfo hints = {};
+    struct addrinfo hints = {0};
     struct addrinfo* addrs;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -261,7 +261,7 @@ int main(int argc, char** argv) {
     char* upstream_port;
     parse_addr(upstream_host, &upstream_port);
 
-    TheBridge b = {};
+    TheBridge b = {0};
 
     printf("Connecting to downstream game...\n");
     b.game2dbg_fd = open_game2dbg_fifo(game2dbg_path);
